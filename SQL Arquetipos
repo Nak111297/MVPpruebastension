@@ -55,3 +55,88 @@ LEFT JOIN RIESGOS.DEV.VISTA_GLOBAL_CLIENTE d
 
 WHERE p.KnFecha = 20260131
   AND p.TOTAL_PASIVO > 0
+
+########################## TABLA CALIBRACION ###############################
+
+WITH clasificados AS (
+    SELECT 
+        p.KnCliente,
+        p.TOTAL_PASIVO,
+        p.BxProductoXpert,
+        p.TipoPersona,
+        d.EDAD,
+        d.GENERACION,
+        d.INGRESO_FINAL,
+        d.FLAG_NEGOCIO_PROPIO,
+        d.ANTIGUEDAD,
+        CASE
+            WHEN p.TipoPersona = 'Jurídica' AND p.TOTAL_PASIVO >= 50000000 
+                THEN 'corporativo'
+            WHEN p.TipoPersona = 'Jurídica' AND p.TOTAL_PASIVO >= 500000 
+                THEN 'pyme_crecimiento'
+            WHEN p.TipoPersona = 'Jurídica' 
+                THEN 'micro_tradicional'
+            WHEN d.FLAG_NEGOCIO_PROPIO = 1 AND p.TOTAL_PASIVO < 500000 
+                THEN 'micro_tradicional'
+            WHEN d.FLAG_NEGOCIO_PROPIO = 1 AND p.TOTAL_PASIVO >= 500000 
+                THEN 'pyme_crecimiento'
+            WHEN d.NIT IS NOT NULL AND d.EDAD <= 35 
+                 AND d.GENERACION IN ('Z','Millennial') 
+                THEN 'digital'
+            WHEN d.NIT IS NOT NULL AND d.EDAD > 45 
+                 AND p.TOTAL_PASIVO >= 50000 
+                THEN 'tradicional'
+            WHEN d.NIT IS NOT NULL AND d.EDAD BETWEEN 25 AND 45 
+                 AND d.INGRESO_FINAL >= 8000 
+                THEN 'emergente'
+            WHEN d.NIT IS NOT NULL AND (d.INGRESO_FINAL < 5000 
+                 OR d.INGRESO_FINAL IS NULL) 
+                THEN 'inclusivo'
+            WHEN d.NIT IS NOT NULL AND d.EDAD > 45 
+                THEN 'tradicional'
+            WHEN d.NIT IS NOT NULL 
+                THEN 'emergente'
+            WHEN p.TOTAL_PASIVO >= 50000 
+                THEN 'tradicional'
+            ELSE 'inclusivo'
+        END AS arquetipo,
+        CASE
+            WHEN p.BxProductoXpert IN ('MONETA','ODSMON') THEN 'monetaria'
+            WHEN p.BxProductoXpert IN ('AHORRO','ODSAHO') THEN 'ahorro'
+            WHEN p.BxProductoXpert = 'ODSCDP' THEN 'plazo_fijo'
+            WHEN p.BxProductoXpert = 'FOGYT' THEN 'fondo_gyt'
+            ELSE 'otro'
+        END AS tipo_producto
+    FROM RIESGOS.DEV.PRODUCTOS_PASIVOS_CUENTA p
+    LEFT JOIN RIESGOS.DEV.VISTA_GLOBAL_CLIENTE d ON p.NIT = d.NIT
+    WHERE p.KnFecha = 20260131
+      AND p.TOTAL_PASIVO > 0
+)
+
+SELECT 
+    arquetipo,
+    COUNT(DISTINCT KnCliente) AS clientes,
+    SUM(TOTAL_PASIVO) AS saldo_total,
+    ROUND(AVG(TOTAL_PASIVO), 2) AS saldo_promedio,
+    ROUND(AVG(CAST(EDAD AS FLOAT)), 1) AS edad_promedio,
+    ROUND(AVG(CAST(ANTIGUEDAD AS FLOAT)), 1) AS antiguedad_promedio,
+    
+    -- Mix de producto (% del saldo del segmento)
+    ROUND(SUM(CASE WHEN tipo_producto = 'monetaria' THEN TOTAL_PASIVO ELSE 0 END) 
+        / SUM(TOTAL_PASIVO) * 100, 1) AS pct_monetaria,
+    ROUND(SUM(CASE WHEN tipo_producto = 'ahorro' THEN TOTAL_PASIVO ELSE 0 END) 
+        / SUM(TOTAL_PASIVO) * 100, 1) AS pct_ahorro,
+    ROUND(SUM(CASE WHEN tipo_producto = 'plazo_fijo' THEN TOTAL_PASIVO ELSE 0 END) 
+        / SUM(TOTAL_PASIVO) * 100, 1) AS pct_plazo_fijo,
+    ROUND(SUM(CASE WHEN tipo_producto = 'fondo_gyt' THEN TOTAL_PASIVO ELSE 0 END) 
+        / SUM(TOTAL_PASIVO) * 100, 1) AS pct_fondo_gyt,
+    
+    -- Saldo líquido vs anclado
+    SUM(CASE WHEN tipo_producto IN ('monetaria','ahorro') THEN TOTAL_PASIVO ELSE 0 END) 
+        AS saldo_liquido,
+    SUM(CASE WHEN tipo_producto IN ('plazo_fijo','fondo_gyt') THEN TOTAL_PASIVO ELSE 0 END) 
+        AS saldo_anclado
+
+FROM clasificados
+GROUP BY arquetipo
+ORDER BY saldo_total DESC
