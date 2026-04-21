@@ -57,3 +57,73 @@ SELECT TOP (1000) [KnCliente]
       ,[CNT_TOTAL]
       ,[TOTAL_PASIVO]
   FROM [RIESGOS].[DEV].[PRODUCTOS_PASIVOS_CUENTA]
+
+
+WITH clientes AS (
+    SELECT 
+        d.NIT,
+        d.EDAD,
+        d.GENERACION,
+        d.TIPOPERSONA,
+        d.INGRESO_FINAL,
+        d.FLAG_NEGOCIO_PROPIO,
+        d.ACTIVIDAD_ECONOMICA,
+        d.ANTIGUEDAD,
+        d.DEPARTAMENTO,
+        p.KnCliente,
+        p.BxProductoXpert,
+        p.TipoPersona AS TipoPersonaPasivo,
+        p.TOTAL_PASIVO
+    FROM RIESGOS.DEV.VISTA_GLOBAL_CLIENTE d
+    INNER JOIN RIESGOS.DEV.PRODUCTOS_PASIVOS_CUENTA p
+        ON d.NIT = p.NIT
+    WHERE p.KnFecha = 20260131
+      AND p.TOTAL_PASIVO > 0
+),
+
+clasificados AS (
+    SELECT *,
+        CASE
+            -- EMPRESAS (jurídica primero)
+            WHEN TipoPersonaPasivo = 'Jurídica' AND TOTAL_PASIVO >= 50000000 
+                THEN 'corporativo'
+            WHEN TipoPersonaPasivo = 'Jurídica' AND TOTAL_PASIVO >= 500000 
+                THEN 'pyme_crecimiento'
+            WHEN TipoPersonaPasivo = 'Jurídica' 
+                THEN 'micro_tradicional'
+            
+            -- PERSONAS con negocio propio → micro empresa
+            WHEN FLAG_NEGOCIO_PROPIO = 1 AND TOTAL_PASIVO < 500000 
+                THEN 'micro_tradicional'
+            WHEN FLAG_NEGOCIO_PROPIO = 1 AND TOTAL_PASIVO >= 500000 
+                THEN 'pyme_crecimiento'
+            
+            -- PERSONAS por perfil demográfico
+            WHEN EDAD <= 35 AND GENERACION IN ('Z','Millennial') 
+                THEN 'digital'
+            WHEN EDAD > 45 AND TOTAL_PASIVO >= 50000 
+                THEN 'tradicional'
+            WHEN EDAD BETWEEN 25 AND 45 AND INGRESO_FINAL >= 8000 
+                THEN 'emergente'
+            WHEN INGRESO_FINAL < 5000 OR INGRESO_FINAL IS NULL 
+                THEN 'inclusivo'
+            
+            -- DEFAULT
+            WHEN EDAD > 45 THEN 'tradicional'
+            ELSE 'emergente'
+        END AS arquetipo
+    FROM clientes
+)
+
+SELECT 
+    arquetipo,
+    COUNT(*) AS clientes,
+    COUNT(DISTINCT KnCliente) AS clientes_unicos,
+    SUM(TOTAL_PASIVO) AS saldo_total,
+    AVG(TOTAL_PASIVO) AS saldo_promedio,
+    AVG(EDAD) AS edad_promedio,
+    AVG(INGRESO_FINAL) AS ingreso_promedio,
+    AVG(CAST(ANTIGUEDAD AS FLOAT)) AS antiguedad_promedio
+FROM clasificados
+GROUP BY arquetipo
+ORDER BY saldo_total DESC
