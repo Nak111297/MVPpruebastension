@@ -1,0 +1,57 @@
+SELECT 
+    p.KnCliente,
+    p.NIT,
+    p.TOTAL_PASIVO,
+    p.BxProductoXpert,
+    p.TipoPersona,
+    d.EDAD,
+    d.GENERACION,
+    d.INGRESO_FINAL,
+    d.FLAG_NEGOCIO_PROPIO,
+    d.ANTIGUEDAD,
+    d.DEPARTAMENTO,
+    CASE
+        -- EMPRESAS
+        WHEN p.TipoPersona = 'Jurídica' AND p.TOTAL_PASIVO >= 50000000 
+            THEN 'corporativo'
+        WHEN p.TipoPersona = 'Jurídica' AND p.TOTAL_PASIVO >= 500000 
+            THEN 'pyme_crecimiento'
+        WHEN p.TipoPersona = 'Jurídica' 
+            THEN 'micro_tradicional'
+        
+        -- PERSONAS con negocio propio
+        WHEN d.FLAG_NEGOCIO_PROPIO = 1 AND p.TOTAL_PASIVO < 500000 
+            THEN 'micro_tradicional'
+        WHEN d.FLAG_NEGOCIO_PROPIO = 1 AND p.TOTAL_PASIVO >= 500000 
+            THEN 'pyme_crecimiento'
+        
+        -- PERSONAS con match demográfico
+        WHEN d.NIT IS NOT NULL AND d.EDAD <= 35 
+             AND d.GENERACION IN ('Z','Millennial') 
+            THEN 'digital'
+        WHEN d.NIT IS NOT NULL AND d.EDAD > 45 
+             AND p.TOTAL_PASIVO >= 50000 
+            THEN 'tradicional'
+        WHEN d.NIT IS NOT NULL AND d.EDAD BETWEEN 25 AND 45 
+             AND d.INGRESO_FINAL >= 8000 
+            THEN 'emergente'
+        WHEN d.NIT IS NOT NULL AND (d.INGRESO_FINAL < 5000 
+             OR d.INGRESO_FINAL IS NULL) 
+            THEN 'inclusivo'
+        WHEN d.NIT IS NOT NULL AND d.EDAD > 45 
+            THEN 'tradicional'
+        WHEN d.NIT IS NOT NULL 
+            THEN 'emergente'
+        
+        -- SIN MATCH demográfico — clasificar por saldo
+        WHEN p.TOTAL_PASIVO >= 50000 
+            THEN 'tradicional'
+        ELSE 'inclusivo'
+    END AS arquetipo
+
+FROM RIESGOS.DEV.PRODUCTOS_PASIVOS_CUENTA p
+LEFT JOIN RIESGOS.DEV.VISTA_GLOBAL_CLIENTE d 
+    ON p.NIT = d.NIT
+
+WHERE p.KnFecha = 20260131
+  AND p.TOTAL_PASIVO > 0
