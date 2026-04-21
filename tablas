@@ -162,3 +162,6 @@ WHERE p.KnFecha = 20260131
   AND p.TOTAL_PASIVO > 0
   AND d.NIT IS NULL
 
+cuentas_sin_match	saldo_sin_match	saldo_promedio	juridicas	individuales	sin_tipo
+307678	6513730136.87	21170.607378	1638	294801	11239
+
