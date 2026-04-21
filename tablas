@@ -149,3 +149,16 @@ WHERE KnFecha = 20260131
   AND TOTAL_PASIVO > 0
 inclusivo	119239	106448	 Q725,541,772.89 	1.33%	6084.769017	53	3177.378443	15.44351531
 
+SELECT 
+    COUNT(*) AS cuentas_sin_match,
+    SUM(p.TOTAL_PASIVO) AS saldo_sin_match,
+    AVG(p.TOTAL_PASIVO) AS saldo_promedio,
+    SUM(CASE WHEN p.TipoPersona = 'Jurídica' THEN 1 ELSE 0 END) AS juridicas,
+    SUM(CASE WHEN p.TipoPersona = 'Individual' THEN 1 ELSE 0 END) AS individuales,
+    SUM(CASE WHEN p.TipoPersona IS NULL THEN 1 ELSE 0 END) AS sin_tipo
+FROM RIESGOS.DEV.PRODUCTOS_PASIVOS_CUENTA p
+LEFT JOIN RIESGOS.DEV.VISTA_GLOBAL_CLIENTE d ON p.NIT = d.NIT
+WHERE p.KnFecha = 20260131
+  AND p.TOTAL_PASIVO > 0
+  AND d.NIT IS NULL
+
